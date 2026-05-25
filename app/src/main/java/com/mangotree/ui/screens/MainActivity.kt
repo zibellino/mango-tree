@@ -15,10 +15,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.mangotree.R
 import com.mangotree.data.auth.GitHubAuthManager
+import com.mangotree.data.git.GitResult
 import com.mangotree.data.git.RepoEntry
 import com.mangotree.databinding.ActivityMainBinding
 import com.mangotree.ui.components.RepoAdapter
 import com.mangotree.util.UriToFile
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import net.openid.appauth.AuthorizationException
 import net.openid.appauth.AuthorizationResponse
 
@@ -225,15 +228,15 @@ class MainActivity : AppCompatActivity() {
         } else {
             // Clone into it
             Toast.makeText(this, "Cloning...", Toast.LENGTH_SHORT).show()
-            androidx.lifecycle.lifecycleScope.launch {
+            lifecycleScope.launch {
                 val result = viewModel.gitManager.clone(pendingUrl, dir, token)
-                if (result is com.mangotree.data.git.GitResult.Success) {
+                if (result is GitResult.Success) {
                     viewModel.repoStore.add(RepoEntry(pendingName, uri.toString(), pendingUrl))
                     viewModel.refreshRepos()
                     Toast.makeText(this@MainActivity, "Cloned!", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(this@MainActivity,
-                        (result as com.mangotree.data.git.GitResult.Error).message,
+                        (result as GitResult.Error).message,
                         Toast.LENGTH_LONG).show()
                 }
             }
@@ -295,7 +298,3 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
-// Extension to use lifecycleScope from activity easily
-fun androidx.appcompat.app.AppCompatActivity.launch(block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
-    androidx.lifecycle.lifecycleScope.launch(block = block)
-}
