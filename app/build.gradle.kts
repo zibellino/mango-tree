@@ -39,6 +39,9 @@ android {
     packaging {
         resources {
             excludes += setOf(
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE*",
+                "META-INF/NOTICE*",
                 "OSGI-INF/**",
                 "META-INF/ECLIPSE_.*",
                 "META-INF/*.SF",
