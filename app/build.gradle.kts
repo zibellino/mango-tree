@@ -35,6 +35,20 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    packaging {
+        resources {
+            excludes += setOf(
+                "OSGI-INF/**",
+                "META-INF/ECLIPSE_.*",
+                "META-INF/*.SF",
+                "META-INF/*.DSA",
+                "META-INF/*.RSA",
+                "about.html",
+                "plugin.properties"
+            )
+        }
+    }
 }
 
 dependencies {
