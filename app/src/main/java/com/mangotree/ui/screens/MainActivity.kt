@@ -1,7 +1,5 @@
 package com.mangotree.ui.screens
 
-import android.content.Intent
-import android.net.Uri
 import android.app.Activity
 import android.os.Build
 import android.os.Environment
