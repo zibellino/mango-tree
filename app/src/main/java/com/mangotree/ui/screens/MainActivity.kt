@@ -1,6 +1,11 @@
 package com.mangotree.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import android.app.Activity
+import android.os.Build
+import android.os.Environment
+import android.provider.Settings
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -53,12 +58,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun requestStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                    data = Uri.parse("package:$packageName")
+                })
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
-
+        requestStoragePermission()
         authManager = GitHubAuthManager(this)
 
         setupRecyclerView()
