@@ -223,14 +223,18 @@ class MainActivity : AppCompatActivity() {
         val token = viewModel.tokenStore.getToken() ?: return
 
         if (viewModel.gitManager.isGitRepo(dir)) {
-            viewModel.repoStore.add(RepoEntry(ghRepo.name, uri.toString(), ghRepo.cloneUrl))
-            viewModel.refreshRepos()
+            lifecycleScope.launch {
+                val branch = viewModel.gitManager.currentBranch(dir)
+                viewModel.repoStore.add(RepoEntry(ghRepo.name, uri.toString(), ghRepo.cloneUrl, branch))
+                viewModel.refreshRepos()
+            }
         } else {
             Toast.makeText(this, "Cloning...", Toast.LENGTH_SHORT).show()
             lifecycleScope.launch {
                 val result = viewModel.gitManager.clone(ghRepo.cloneUrl, dir, token)
                 if (result is GitResult.Success) {
-                    viewModel.repoStore.add(RepoEntry(ghRepo.name, uri.toString(), ghRepo.cloneUrl))
+                    val branch = viewModel.gitManager.defaultBranch(dir)
+                    viewModel.repoStore.add(RepoEntry(ghRepo.name, uri.toString(), ghRepo.cloneUrl, branch))
                     viewModel.refreshRepos()
                     Toast.makeText(this@MainActivity, "Cloned!", Toast.LENGTH_SHORT).show()
                 } else {

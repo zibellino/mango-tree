@@ -39,6 +39,14 @@ class GitManager {
             }
         }
 
+    suspend fun defaultBranch(localDir: File): String = withContext(Dispatchers.IO) {
+        try {
+            Git.open(localDir).repository.branch
+        } catch (e: Exception) {
+            "main"
+        }
+    }
+
     suspend fun pull(localDir: File, token: String): GitResult = withContext(Dispatchers.IO) {
         try {
             val git = Git.open(localDir)
