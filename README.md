@@ -1,6 +1,6 @@
 # MangoTree
 
-A free, minimal Android git client for syncing GitHub repositories. No F-Droid, no subscriptions, no broad file permissions.
+A free, minimal Android git client for syncing GitHub repositories.
 
 ## Features
 
