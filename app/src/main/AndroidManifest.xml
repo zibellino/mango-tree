@@ -23,6 +23,11 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ui.screens.CommitActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.screens.MainActivity" />
+
         <!-- OAuth redirect handler -->
         <activity
             android:name="net.openid.appauth.RedirectUriReceiverActivity"

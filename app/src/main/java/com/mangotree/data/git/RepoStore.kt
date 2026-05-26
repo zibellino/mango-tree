@@ -1,16 +1,34 @@
 package com.mangotree.data.git
 
 import android.content.Context
-import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
 
 data class RepoEntry(
     val name: String,
-    val localUri: String,   // persisted URI from folder picker
+    val localUri: String,
     val remoteUrl: String,
     val currentBranch: String = "main"
-)
+) {
+    fun toJson(): String = JSONObject().apply {
+        put("name", name)
+        put("localUri", localUri)
+        put("remoteUrl", remoteUrl)
+        put("currentBranch", currentBranch)
+    }.toString()
+
+    companion object {
+        fun fromJson(json: String): RepoEntry {
+            val obj = JSONObject(json)
+            return RepoEntry(
+                name = obj.getString("name"),
+                localUri = obj.getString("localUri"),
+                remoteUrl = obj.getString("remoteUrl"),
+                currentBranch = obj.optString("currentBranch", "main")
+            )
+        }
+    }
+}
 
 class RepoStore(private val context: Context) {
 
@@ -19,27 +37,12 @@ class RepoStore(private val context: Context) {
     fun getAll(): List<RepoEntry> {
         val json = prefs.getString(KEY_REPOS, "[]") ?: "[]"
         val arr = JSONArray(json)
-        return (0 until arr.length()).map {
-            val obj = arr.getJSONObject(it)
-            RepoEntry(
-                name = obj.getString("name"),
-                localUri = obj.getString("localUri"),
-                remoteUrl = obj.getString("remoteUrl"),
-                currentBranch = obj.optString("currentBranch", "main")
-            )
-        }
+        return (0 until arr.length()).map { RepoEntry.fromJson(arr.getString(it)) }
     }
 
     fun save(repos: List<RepoEntry>) {
         val arr = JSONArray()
-        repos.forEach { repo ->
-            arr.put(JSONObject().apply {
-                put("name", repo.name)
-                put("localUri", repo.localUri)
-                put("remoteUrl", repo.remoteUrl)
-                put("currentBranch", repo.currentBranch)
-            })
-        }
+        repos.forEach { arr.put(it.toJson()) }
         prefs.edit().putString(KEY_REPOS, arr.toString()).apply()
     }
 
@@ -48,8 +51,7 @@ class RepoStore(private val context: Context) {
     fun remove(localUri: String) = save(getAll().filter { it.localUri != localUri })
 
     fun update(updated: RepoEntry) {
-        val list = getAll().map { if (it.localUri == updated.localUri) updated else it }
-        save(list)
+        save(getAll().map { if (it.localUri == updated.localUri) updated else it })
     }
 
     companion object {

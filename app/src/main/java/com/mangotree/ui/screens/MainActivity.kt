@@ -1,29 +1,31 @@
 package com.mangotree.ui.screens
 
 import android.app.Activity
-import android.os.Build
-import android.os.Environment
-import android.provider.Settings
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.Settings
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.mangotree.R
 import com.mangotree.data.auth.GitHubAuthManager
+import com.mangotree.data.auth.GitHubRepo
 import com.mangotree.data.git.GitResult
 import com.mangotree.data.git.RepoEntry
 import com.mangotree.databinding.ActivityMainBinding
 import com.mangotree.ui.components.RepoAdapter
 import com.mangotree.util.UriToFile
-import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import net.openid.appauth.AuthorizationException
 import net.openid.appauth.AuthorizationResponse
@@ -35,11 +37,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var authManager: GitHubAuthManager
     private lateinit var adapter: RepoAdapter
 
+    private var pendingGitHubRepo: GitHubRepo? = null
+
     private val folderPickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        uri?.let { handleFolderPicked(it) }
-    }
+    ) { uri -> uri?.let { handleFolderPicked(it) } }
 
     private val oauthLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -48,12 +50,29 @@ class MainActivity : AppCompatActivity() {
             val data = result.data ?: return@registerForActivityResult
             val response = AuthorizationResponse.fromIntent(data)
             val ex = AuthorizationException.fromIntent(data)
-            if (response != null) {
-                exchangeToken(response)
-            } else {
-                Toast.makeText(this, "Auth failed: ${ex?.message}", Toast.LENGTH_LONG).show()
-            }
+            if (response != null) exchangeToken(response)
+            else Toast.makeText(this, "Auth failed: ${ex?.message}", Toast.LENGTH_LONG).show()
         }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        setSupportActionBar(binding.toolbar)
+
+        requestStoragePermission()
+        authManager = GitHubAuthManager(this)
+
+        setupRecyclerView()
+        observeViewModel()
+
+        binding.fab.setOnClickListener {
+            if (!viewModel.tokenStore.isLoggedIn()) showLoginRequired()
+            else showGitHubRepoPicker()
+        }
+
+        if (!viewModel.tokenStore.isLoggedIn()) showLoginBanner()
     }
 
     private fun requestStoragePermission() {
@@ -66,41 +85,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        setSupportActionBar(binding.toolbar)
-        requestStoragePermission()
-        authManager = GitHubAuthManager(this)
-
-        setupRecyclerView()
-        observeViewModel()
-
-        binding.fab.setOnClickListener {
-            if (!viewModel.tokenStore.isLoggedIn()) {
-                showLoginRequired()
-            } else {
-                showAddRepoDialog()
-            }
-        }
-
-        if (!viewModel.tokenStore.isLoggedIn()) {
-            showLoginBanner()
-        }
-    }
-
     private fun setupRecyclerView() {
         adapter = RepoAdapter(
-            onSync = { repo -> viewModel.sync(repo) },
+            onPull = { repo -> viewModel.pull(repo) },
+            onCommit = { repo ->
+                val intent = Intent(this, CommitActivity::class.java)
+                intent.putExtra("repo", repo.toJson())
+                startActivity(intent)
+            },
+            onPush = { repo -> viewModel.push(repo) },
             onBranch = { repo -> showBranchDialog(repo) },
             onRemove = { repo ->
                 AlertDialog.Builder(this)
                     .setTitle("Remove repo")
                     .setMessage("Remove ${repo.name} from MangoTree? (local files are kept)")
-                    .setPositiveButton("Remove") { _, _ ->
-                        viewModel.removeRepo(repo.localUri)
-                    }
+                    .setPositiveButton("Remove") { _, _ -> viewModel.removeRepo(repo.localUri) }
                     .setNegativeButton("Cancel", null)
                     .show()
             }
@@ -149,10 +148,7 @@ class MainActivity : AppCompatActivity() {
     private fun startOAuth() {
         val prefs = getSharedPreferences("oauth_config", MODE_PRIVATE)
         val clientId = prefs.getString("client_id", "") ?: ""
-        if (clientId.isBlank()) {
-            showOAuthConfigDialog()
-            return
-        }
+        if (clientId.isBlank()) { showOAuthConfigDialog(); return }
         oauthLauncher.launch(authManager.buildAuthIntent(clientId))
     }
 
@@ -160,10 +156,9 @@ class MainActivity : AppCompatActivity() {
         val view = layoutInflater.inflate(R.layout.dialog_oauth_config, null)
         val clientIdInput = view.findViewById<android.widget.EditText>(R.id.clientIdInput)
         val clientSecretInput = view.findViewById<android.widget.EditText>(R.id.clientSecretInput)
-
         AlertDialog.Builder(this)
             .setTitle("GitHub OAuth App")
-            .setMessage("Enter your GitHub OAuth app credentials.\n\nRedirect URI to use:\ncom.mangotree://oauth")
+            .setMessage("Enter your GitHub OAuth app credentials.\n\nRedirect URI: com.mangotree://oauth")
             .setView(view)
             .setPositiveButton("Save & Login") { _, _ ->
                 val clientId = clientIdInput.text.toString().trim()
@@ -196,74 +191,64 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    private fun showAddRepoDialog() {
-        val view = layoutInflater.inflate(R.layout.dialog_add_repo, null)
-        val nameInput = view.findViewById<android.widget.EditText>(R.id.repoNameInput)
-        val urlInput = view.findViewById<android.widget.EditText>(R.id.repoUrlInput)
+    // GitHub repo picker — fetches list from API, shows searchable dialog
+    private fun showGitHubRepoPicker() {
+        viewModel.fetchGitHubRepos()
+        viewModel.githubRepos.observe(this) { repos ->
+            if (repos.isEmpty()) return@observe
+            viewModel.githubRepos.removeObservers(this)
 
-        AlertDialog.Builder(this)
-            .setTitle("Add repository")
-            .setView(view)
-            .setPositiveButton("Pick folder") { _, _ ->
-                val name = nameInput.text.toString().trim()
-                val url = urlInput.text.toString().trim()
-                if (name.isNotBlank() && url.isNotBlank()) {
-                    pendingName = name
-                    pendingUrl = url
+            val names = repos.map { "${it.name} ${if (it.isPrivate) "🔒" else ""}" }.toTypedArray()
+            AlertDialog.Builder(this)
+                .setTitle("Select GitHub repo")
+                .setItems(names) { _, i ->
+                    pendingGitHubRepo = repos[i]
                     folderPickerLauncher.launch(null)
                 }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
     }
 
-    private var pendingName = ""
-    private var pendingUrl = ""
-
     private fun handleFolderPicked(uri: Uri) {
-        // Persist permission across reboots
         contentResolver.takePersistableUriPermission(
             uri,
             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         )
-        val dir = UriToFile.fromUri(this, uri)
-        if (dir == null) {
+        val ghRepo = pendingGitHubRepo ?: return
+        val dir = UriToFile.fromUri(this, uri) ?: run {
             Toast.makeText(this, "Cannot access this folder", Toast.LENGTH_LONG).show()
             return
         }
-
         val token = viewModel.tokenStore.getToken() ?: return
 
         if (viewModel.gitManager.isGitRepo(dir)) {
-            // Already a git repo, just add it
-            viewModel.repoStore.add(RepoEntry(pendingName, uri.toString(), pendingUrl))
+            viewModel.repoStore.add(RepoEntry(ghRepo.name, uri.toString(), ghRepo.cloneUrl))
             viewModel.refreshRepos()
         } else {
-            // Clone into it
             Toast.makeText(this, "Cloning...", Toast.LENGTH_SHORT).show()
             lifecycleScope.launch {
-                val result = viewModel.gitManager.clone(pendingUrl, dir, token)
+                val result = viewModel.gitManager.clone(ghRepo.cloneUrl, dir, token)
                 if (result is GitResult.Success) {
-                    viewModel.repoStore.add(RepoEntry(pendingName, uri.toString(), pendingUrl))
+                    viewModel.repoStore.add(RepoEntry(ghRepo.name, uri.toString(), ghRepo.cloneUrl))
                     viewModel.refreshRepos()
                     Toast.makeText(this@MainActivity, "Cloned!", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(this@MainActivity,
-                        (result as GitResult.Error).message,
-                        Toast.LENGTH_LONG).show()
+                        (result as GitResult.Error).message, Toast.LENGTH_LONG).show()
                 }
             }
         }
+        pendingGitHubRepo = null
     }
 
     private fun showBranchDialog(repo: RepoEntry) {
         viewModel.listBranches(repo) { branches ->
             runOnUiThread {
-                val arr = branches.toTypedArray()
                 AlertDialog.Builder(this)
                     .setTitle("Switch branch")
-                    .setItems(arr) { _, i ->
-                        viewModel.switchBranch(repo, arr[i])
+                    .setItems(branches.toTypedArray()) { _, i ->
+                        viewModel.switchBranch(repo, branches[i])
                     }
                     .setNegativeButton("Cancel", null)
                     .show()
@@ -272,20 +257,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showConflictDialog() {
-        // Find the conflicting repo
         val repo = viewModel.repos.value?.firstOrNull {
             UriToFile.fromUri(this, Uri.parse(it.localUri)) == viewModel.conflictRepoDir
         } ?: return
-
         AlertDialog.Builder(this)
             .setTitle("Merge conflict")
-            .setMessage("There are conflicts that can't be auto-resolved.")
-            .setPositiveButton("Discard local & force pull") { _, _ ->
-                viewModel.forcePull(repo)
-            }
-            .setNegativeButton("Cancel sync") { _, _ ->
-                viewModel.uiState.value = UiState.Idle
-            }
+            .setMessage("Conflicts detected that can't be auto-resolved.")
+            .setPositiveButton("Discard local & force pull") { _, _ -> viewModel.forcePull(repo) }
+            .setNegativeButton("Cancel") { _, _ -> viewModel.uiState.value = UiState.Idle }
             .show()
     }
 
@@ -310,4 +289,3 @@ class MainActivity : AppCompatActivity() {
         authManager.dispose()
     }
 }
-

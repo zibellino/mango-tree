@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="12dp"
+    android:paddingVertical="6dp">
+
+    <CheckBox
+        android:id="@+id/fileCheckbox"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:ellipsize="middle"
+        android:singleLine="true" />
+
+    <TextView
+        android:id="@+id/fileStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="8dp"
+        android:textAppearance="?attr/textAppearanceLabelSmall" />
+
+    <ImageButton
+        android:id="@+id/discardButton"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Discard"
+        android:src="@android:drawable/ic_menu_revert"
+        android:tint="?attr/colorError" />
+
+</LinearLayout>

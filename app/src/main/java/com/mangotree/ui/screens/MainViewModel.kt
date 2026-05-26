@@ -5,7 +5,10 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
+import com.mangotree.data.auth.GitHubApiService
+import com.mangotree.data.auth.GitHubRepo
 import com.mangotree.data.auth.TokenStore
+import com.mangotree.data.git.ChangedFile
 import com.mangotree.data.git.GitManager
 import com.mangotree.data.git.GitResult
 import com.mangotree.data.git.RepoEntry
@@ -25,14 +28,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     val tokenStore = TokenStore(app)
     val repoStore = RepoStore(app)
-    val gitManager = GitManager(app)
+    val gitManager = GitManager()
+    val apiService = GitHubApiService()
 
     val repos = MutableLiveData<List<RepoEntry>>(emptyList())
     val uiState = MutableLiveData<UiState>(UiState.Idle)
+    val githubRepos = MutableLiveData<List<GitHubRepo>>(emptyList())
+    val changedFiles = MutableLiveData<List<ChangedFile>>(emptyList())
 
-    // Temp storage for conflict resolution context
     var conflictRepoDir: File? = null
     var conflictBranch: String = "main"
+
+    // GitHub user info cache
+    var githubUserName: String = ""
+    var githubUserEmail: String = ""
 
     init {
         repos.value = repoStore.getAll()
@@ -47,16 +56,48 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         refreshRepos()
     }
 
-    fun sync(repo: RepoEntry) {
+    fun pull(repo: RepoEntry) {
         val token = tokenStore.getToken() ?: return
-        val dir = UriToFile.fromUri(getApplication(), Uri.parse(repo.localUri)) ?: run {
-            uiState.value = UiState.Message("Cannot access directory", isError = true)
-            return
-        }
+        val dir = resolveDir(repo) ?: return
         uiState.value = UiState.Loading
         viewModelScope.launch {
-            val result = gitManager.sync(dir, token, repo.currentBranch)
+            handleResult(gitManager.pull(dir, token), dir, repo.currentBranch)
+        }
+    }
+
+    fun push(repo: RepoEntry) {
+        val token = tokenStore.getToken() ?: return
+        val dir = resolveDir(repo) ?: return
+        uiState.value = UiState.Loading
+        viewModelScope.launch {
+            handleResult(gitManager.push(dir, token), dir, repo.currentBranch)
+        }
+    }
+
+    fun loadChangedFiles(repo: RepoEntry) {
+        val dir = resolveDir(repo) ?: return
+        viewModelScope.launch {
+            changedFiles.value = gitManager.getChangedFiles(dir)
+        }
+    }
+
+    fun commit(repo: RepoEntry, files: List<String>, message: String) {
+        val dir = resolveDir(repo) ?: return
+        uiState.value = UiState.Loading
+        viewModelScope.launch {
+            val result = gitManager.commit(dir, files, message, githubUserName, githubUserEmail)
+            if (result == GitResult.Success) {
+                changedFiles.value = emptyList()
+            }
             handleResult(result, dir, repo.currentBranch)
+        }
+    }
+
+    fun discardFile(repo: RepoEntry, path: String) {
+        val dir = resolveDir(repo) ?: return
+        viewModelScope.launch {
+            gitManager.discardFile(dir, path)
+            changedFiles.value = gitManager.getChangedFiles(dir)
         }
     }
 
@@ -65,19 +106,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val dir = conflictRepoDir ?: return
         uiState.value = UiState.Loading
         viewModelScope.launch {
-            val result = gitManager.forcePull(dir, token, conflictBranch)
-            handleResult(result, dir, conflictBranch)
+            handleResult(gitManager.forcePull(dir, token, conflictBranch), dir, conflictBranch)
         }
     }
 
     fun switchBranch(repo: RepoEntry, branch: String) {
-        val dir = UriToFile.fromUri(getApplication(), Uri.parse(repo.localUri)) ?: return
+        val dir = resolveDir(repo) ?: return
         uiState.value = UiState.Loading
         viewModelScope.launch {
             val result = gitManager.switchBranch(dir, branch)
             if (result == GitResult.Success) {
-                val updated = repo.copy(currentBranch = branch)
-                repoStore.update(updated)
+                repoStore.update(repo.copy(currentBranch = branch))
                 refreshRepos()
                 uiState.value = UiState.Message("Switched to $branch")
             } else {
@@ -87,10 +126,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun listBranches(repo: RepoEntry, onResult: (List<String>) -> Unit) {
-        val dir = UriToFile.fromUri(getApplication(), Uri.parse(repo.localUri)) ?: return
+        val dir = resolveDir(repo) ?: return
+        viewModelScope.launch { onResult(gitManager.listBranches(dir)) }
+    }
+
+    fun fetchGitHubRepos() {
+        val token = tokenStore.getToken() ?: return
         viewModelScope.launch {
-            onResult(gitManager.listBranches(dir))
+            try {
+                githubRepos.value = apiService.fetchUserRepos(token)
+            } catch (e: Exception) {
+                uiState.value = UiState.Message("Failed to load repos: ${e.message}", isError = true)
+            }
         }
+    }
+
+    private fun resolveDir(repo: RepoEntry): File? {
+        val dir = UriToFile.fromUri(getApplication(), Uri.parse(repo.localUri))
+        if (dir == null) uiState.value = UiState.Message("Cannot access directory", isError = true)
+        return dir
     }
 
     private fun handleResult(result: GitResult, dir: File, branch: String) {

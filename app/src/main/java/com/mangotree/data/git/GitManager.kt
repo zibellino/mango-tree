@@ -1,13 +1,12 @@
 package com.mangotree.data.git
 
-import android.content.Context
-import android.net.Uri
-import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.api.RebaseCommand
 import org.eclipse.jgit.api.RebaseResult
 import org.eclipse.jgit.api.ResetCommand
+import org.eclipse.jgit.diff.DiffEntry
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 import java.io.File
 
@@ -17,92 +16,109 @@ sealed class GitResult {
     object ConflictDetected : GitResult()
 }
 
-class GitManager(private val context: Context) {
+data class ChangedFile(
+    val path: String,
+    val status: String  // "Modified", "Added", "Deleted", "Untracked"
+)
 
-    private fun credentialsProvider(token: String) =
-        UsernamePasswordCredentialsProvider(token, "")
+class GitManager {
 
-    /**
-     * Clone a remote repo into a user-picked directory.
-     * The directory must already exist (from folder picker).
-     */
-    suspend fun clone(
-        remoteUrl: String,
-        localDir: File,
-        token: String,
-        onProgress: (String) -> Unit = {}
-    ): GitResult = withContext(Dispatchers.IO) {
-        try {
-            onProgress("Cloning...")
-            Git.cloneRepository()
-                .setURI(remoteUrl)
-                .setDirectory(localDir)
-                .setCredentialsProvider(credentialsProvider(token))
-                .call()
-            GitResult.Success
-        } catch (e: Exception) {
-            GitResult.Error(e.message ?: "Clone failed")
+    private fun creds(token: String) = UsernamePasswordCredentialsProvider(token, "")
+
+    suspend fun clone(remoteUrl: String, localDir: File, token: String): GitResult =
+        withContext(Dispatchers.IO) {
+            try {
+                Git.cloneRepository()
+                    .setURI(remoteUrl)
+                    .setDirectory(localDir)
+                    .setCredentialsProvider(creds(token))
+                    .call()
+                GitResult.Success
+            } catch (e: Exception) {
+                GitResult.Error(e.message ?: "Clone failed")
+            }
         }
-    }
 
-    /**
-     * Pull with rebase. On conflict, returns ConflictDetected.
-     */
     suspend fun pull(localDir: File, token: String): GitResult = withContext(Dispatchers.IO) {
         try {
             val git = Git.open(localDir)
             val result = git.pull()
-                .setCredentialsProvider(credentialsProvider(token))
+                .setCredentialsProvider(creds(token))
                 .setRebase(true)
                 .call()
-
             when {
                 result.isSuccessful -> GitResult.Success
                 result.rebaseResult?.status == RebaseResult.Status.STOPPED ->
                     GitResult.ConflictDetected
-                else -> GitResult.Error("Pull failed: ${result.mergeResult?.mergeStatus}")
+                else -> GitResult.Error("Pull failed: ${result.rebaseResult?.status}")
             }
         } catch (e: Exception) {
             GitResult.Error(e.message ?: "Pull failed")
         }
     }
 
-    /**
-     * Force pull — abort rebase and reset hard to remote branch (discard local).
-     */
     suspend fun forcePull(localDir: File, token: String, branch: String): GitResult =
         withContext(Dispatchers.IO) {
             try {
                 val git = Git.open(localDir)
-                // Abort any in-progress rebase
-                try { git.rebase().setOperation(org.eclipse.jgit.api.RebaseCommand.Operation.ABORT).call() } catch (_: Exception) {}
-                // Fetch latest
-                git.fetch().setCredentialsProvider(credentialsProvider(token)).call()
-                // Reset hard to remote
-                git.reset()
-                    .setMode(ResetCommand.ResetType.HARD)
-                    .setRef("origin/$branch")
-                    .call()
+                try {
+                    git.rebase().setOperation(RebaseCommand.Operation.ABORT).call()
+                } catch (_: Exception) {}
+                git.fetch().setCredentialsProvider(creds(token)).call()
+                git.reset().setMode(ResetCommand.ResetType.HARD).setRef("origin/$branch").call()
                 GitResult.Success
             } catch (e: Exception) {
                 GitResult.Error(e.message ?: "Force pull failed")
             }
         }
 
-    /**
-     * Stage all changes and commit.
-     */
-    suspend fun commitAll(
+    suspend fun push(localDir: File, token: String): GitResult = withContext(Dispatchers.IO) {
+        try {
+            val git = Git.open(localDir)
+            val results = git.push().setCredentialsProvider(creds(token)).call()
+            val error = results.mapNotNull {
+                it.remoteUpdates.firstOrNull { u ->
+                    u.status != org.eclipse.jgit.transport.RemoteRefUpdate.Status.OK &&
+                    u.status != org.eclipse.jgit.transport.RemoteRefUpdate.Status.UP_TO_DATE
+                }
+            }.firstOrNull()
+            if (error != null) GitResult.Error("Push rejected: ${error.status}")
+            else GitResult.Success
+        } catch (e: Exception) {
+            GitResult.Error(e.message ?: "Push failed")
+        }
+    }
+
+    suspend fun getChangedFiles(localDir: File): List<ChangedFile> = withContext(Dispatchers.IO) {
+        try {
+            val git = Git.open(localDir)
+            val status = git.status().call()
+            val files = mutableListOf<ChangedFile>()
+            status.modified.forEach { files.add(ChangedFile(it, "Modified")) }
+            status.added.forEach { files.add(ChangedFile(it, "Added")) }
+            status.removed.forEach { files.add(ChangedFile(it, "Deleted")) }
+            status.untracked.forEach { files.add(ChangedFile(it, "Untracked")) }
+            status.missing.forEach { files.add(ChangedFile(it, "Missing")) }
+            files.sortedBy { it.path }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun commit(
         localDir: File,
+        files: List<String>,
         message: String,
         authorName: String,
         authorEmail: String
     ): GitResult = withContext(Dispatchers.IO) {
         try {
             val git = Git.open(localDir)
-            git.add().addFilepattern(".").call()
+            val addCmd = git.add()
+            files.forEach { addCmd.addFilepattern(it) }
+            addCmd.call()
             git.commit()
-                .setMessage(message)
+                .setMessage(message.ifBlank { "Update" })
                 .setAuthor(authorName, authorEmail)
                 .call()
             GitResult.Success
@@ -111,55 +127,45 @@ class GitManager(private val context: Context) {
         }
     }
 
-    /**
-     * Push to remote.
-     */
-    suspend fun push(localDir: File, token: String): GitResult = withContext(Dispatchers.IO) {
+    suspend fun discardFile(localDir: File, path: String): GitResult = withContext(Dispatchers.IO) {
         try {
             val git = Git.open(localDir)
-            val results = git.push()
-                .setCredentialsProvider(credentialsProvider(token))
-                .call()
-            val error = results.mapNotNull { it.remoteUpdates.firstOrNull { u ->
-                u.status != org.eclipse.jgit.transport.RemoteRefUpdate.Status.OK &&
-                u.status != org.eclipse.jgit.transport.RemoteRefUpdate.Status.UP_TO_DATE
-            }}.firstOrNull()
-            if (error != null) GitResult.Error("Push rejected: ${error.status}")
-            else GitResult.Success
+            val status = git.status().call()
+            when {
+                status.untracked.contains(path) -> {
+                    File(localDir, path).delete()
+                    GitResult.Success
+                }
+                else -> {
+                    git.checkout().addPath(path).call()
+                    GitResult.Success
+                }
+            }
         } catch (e: Exception) {
-            GitResult.Error(e.message ?: "Push failed")
+            GitResult.Error(e.message ?: "Discard failed")
         }
     }
 
-    /**
-     * List all local branches.
-     */
     suspend fun listBranches(localDir: File): List<String> = withContext(Dispatchers.IO) {
         try {
-            val git = Git.open(localDir)
-            git.branchList().call().map { it.name.removePrefix("refs/heads/") }
+            Git.open(localDir).branchList().call()
+                .map { it.name.removePrefix("refs/heads/") }
         } catch (e: Exception) {
             emptyList()
         }
     }
 
-    /**
-     * Switch to a branch.
-     */
     suspend fun switchBranch(localDir: File, branch: String): GitResult =
         withContext(Dispatchers.IO) {
             try {
                 val git = Git.open(localDir)
-                val branches = git.branchList().call().map { it.name.removePrefix("refs/heads/") }
-                if (branch in branches) {
+                val exists = git.branchList().call()
+                    .any { it.name.removePrefix("refs/heads/") == branch }
+                if (exists) {
                     git.checkout().setName(branch).call()
                 } else {
-                    // Create tracking branch from remote
-                    git.checkout()
-                        .setCreateBranch(true)
-                        .setName(branch)
-                        .setStartPoint("origin/$branch")
-                        .call()
+                    git.checkout().setCreateBranch(true).setName(branch)
+                        .setStartPoint("origin/$branch").call()
                 }
                 GitResult.Success
             } catch (e: Exception) {
@@ -167,29 +173,9 @@ class GitManager(private val context: Context) {
             }
         }
 
-    /**
-     * Get current branch name.
-     */
     suspend fun currentBranch(localDir: File): String = withContext(Dispatchers.IO) {
-        try {
-            Git.open(localDir).repository.branch
-        } catch (e: Exception) {
-            "unknown"
-        }
+        try { Git.open(localDir).repository.branch } catch (e: Exception) { "unknown" }
     }
 
-    /**
-     * Sync = pull (rebase) then push.
-     */
-    suspend fun sync(localDir: File, token: String, branch: String): GitResult =
-        withContext(Dispatchers.IO) {
-            val pullResult = pull(localDir, token)
-            if (pullResult != GitResult.Success) return@withContext pullResult
-            push(localDir, token)
-        }
-
-    /**
-     * Check if directory is a valid git repo.
-     */
     fun isGitRepo(dir: File): Boolean = File(dir, ".git").exists()
 }

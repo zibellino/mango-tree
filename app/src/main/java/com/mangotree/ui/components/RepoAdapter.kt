@@ -9,7 +9,9 @@ import com.mangotree.data.git.RepoEntry
 import com.mangotree.databinding.ItemRepoBinding
 
 class RepoAdapter(
-    private val onSync: (RepoEntry) -> Unit,
+    private val onPull: (RepoEntry) -> Unit,
+    private val onCommit: (RepoEntry) -> Unit,
+    private val onPush: (RepoEntry) -> Unit,
     private val onBranch: (RepoEntry) -> Unit,
     private val onRemove: (RepoEntry) -> Unit
 ) : ListAdapter<RepoEntry, RepoAdapter.ViewHolder>(DIFF) {
@@ -21,7 +23,9 @@ class RepoAdapter(
             binding.repoName.text = repo.name
             binding.repoBranch.text = repo.currentBranch
             binding.repoUrl.text = repo.remoteUrl
-            binding.syncButton.setOnClickListener { onSync(repo) }
+            binding.pullButton.setOnClickListener { onPull(repo) }
+            binding.commitButton.setOnClickListener { onCommit(repo) }
+            binding.pushButton.setOnClickListener { onPush(repo) }
             binding.branchButton.setOnClickListener { onBranch(repo) }
             binding.removeButton.setOnClickListener { onRemove(repo) }
         }

@@ -27,38 +27,34 @@
             android:textAppearance="?attr/textAppearanceBodySmall"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
-        <TextView
-            android:id="@+id/repoBranch"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:background="@drawable/branch_badge_bg"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="2dp"
-            android:textAppearance="?attr/textAppearanceLabelSmall" />
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="horizontal">
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/syncButton"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="0dp"
+            <TextView
+                android:id="@+id/repoBranch"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Sync" />
+                android:background="@drawable/branch_badge_bg"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="2dp"
+                android:textAppearance="?attr/textAppearanceLabelSmall" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/branchButton"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="0dp"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:text="Branch" />
+                android:text="Switch"
+                android:textSize="11sp" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/removeButton"
@@ -67,6 +63,40 @@
                 android:layout_height="wrap_content"
                 android:text="✕"
                 android:textColor="?attr/colorError" />
+
+        </LinearLayout>
+
+        <!-- Pull / Commit / Push row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/pullButton"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Pull" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/commitButton"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginHorizontal="6dp"
+                android:text="Commit" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/pushButton"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Push" />
 
         </LinearLayout>
 
