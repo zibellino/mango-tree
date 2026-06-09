@@ -2,7 +2,9 @@ package com.mangotree.data.git
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.eclipse.jgit.api.CreateBranchCommand
 import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.api.ListBranchCommand
 import org.eclipse.jgit.api.RebaseCommand
 import org.eclipse.jgit.api.RebaseResult
 import org.eclipse.jgit.api.ResetCommand
@@ -41,7 +43,11 @@ class GitManager {
 
     suspend fun defaultBranch(localDir: File): String = withContext(Dispatchers.IO) {
         try {
-            Git.open(localDir).repository.branch
+            Git.open(localDir).repository.config
+                .getString("remote", "origin", "HEAD")
+                ?.removePrefix("refs/heads/")
+                ?: "main"
+            
         } catch (e: Exception) {
             "main"
         }
@@ -54,6 +60,7 @@ class GitManager {
                 .setCredentialsProvider(creds(token))
                 .setRebase(true)
                 .call()
+            if (result.isSuccessful) syncLocalBranchesToRemote(git, token)
             when {
                 result.isSuccessful -> GitResult.Success
                 result.rebaseResult?.status == RebaseResult.Status.STOPPED ->
@@ -63,6 +70,56 @@ class GitManager {
         } catch (e: Exception) {
             GitResult.Error(e.message ?: "Pull failed")
         }
+    }
+
+    private fun syncLocalBranchesToRemote(git: Git, token: String) {
+        git.fetch().setRemote("origin").setCredentialsProvider(creds(token)).setRemoveDeletedRefs(true).call()
+
+        val remoteBranches = git.branchList()
+            .setListMode(ListBranchCommand.ListMode.REMOTE)
+            .call()
+            .map { it.name.removePrefix("refs/remotes/origin/") }
+            .filter { it != "HEAD" }
+            .toSet()
+
+        val currentBranch = git.repository.branch
+
+        // switch off orphaned current branch first so it can be deleted below
+        if (currentBranch !in remoteBranches) {
+            val default = git.repository.config
+                .getString("remote", "origin", "HEAD")
+                ?.removePrefix("refs/heads/")
+            if (default != null) {
+                try { git.checkout().setName(default).call() }
+                catch (_: Exception) {}
+            }
+        }
+
+        // now safe to delete any local branch with no remote counterpart
+        git.branchList().call()
+            .map { it.name.removePrefix("refs/heads/") }
+            .filter { it !in remoteBranches }
+            .filter { it != git.repository.branch }
+            .forEach { branch ->
+                try { git.branchDelete().setBranchNames(branch).setForce(true).call() }
+                catch (_: Exception) {}
+            }
+
+        // create local tracking branches for any new remotes
+        val localBranches = git.branchList().call()
+            .map { it.name.removePrefix("refs/heads/") }
+            .toSet()
+        remoteBranches
+            .filter { it !in localBranches }
+            .forEach { branch ->
+                try {
+                    git.branchCreate()
+                        .setName(branch)
+                        .setStartPoint("origin/$branch")
+                        .setUpstreamMode(CreateBranchCommand.SetupUpstreamMode.TRACK)
+                        .call()
+                } catch (_: Exception) {}
+            }
     }
 
     suspend fun forcePull(localDir: File, token: String, branch: String): GitResult =
