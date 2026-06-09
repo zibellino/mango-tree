@@ -60,7 +60,7 @@ class GitManager {
                 .setCredentialsProvider(creds(token))
                 .setRebase(true)
                 .call()
-            if (result.isSuccessful) syncLocalBranchesToRemote(git)
+            if (result.isSuccessful) syncLocalBranchesToRemote(git, token)
             when {
                 result.isSuccessful -> GitResult.Success
                 result.rebaseResult?.status == RebaseResult.Status.STOPPED ->
@@ -72,7 +72,9 @@ class GitManager {
         }
     }
 
-    private fun syncLocalBranchesToRemote(git: Git) {
+    private fun syncLocalBranchesToRemote(git: Git, token: String) {
+        git.fetch().setRemote("origin").setCredentialsProvider(creds(token)).setRemoveDeletedRefs(true).call()
+
         val remoteBranches = git.branchList()
             .setListMode(ListBranchCommand.ListMode.REMOTE)
             .call()
