@@ -81,7 +81,7 @@ class GitManager {
             .map { it.name.removePrefix("refs/remotes/origin/") }
             .filter { it != "HEAD" }
             .toSet()
-
+        throw Exception("Remote branches: $remoteBranches, Local branches: ${git.branchList().call().map { it.name }}")
         val currentBranch = git.repository.branch
 
         // switch off orphaned current branch first so it can be deleted below
