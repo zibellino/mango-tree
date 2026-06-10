@@ -101,8 +101,7 @@ class GitManager {
             .filter { it !in remoteBranches }
             .filter { it != git.repository.branch }
             .forEach { branch ->
-                try { git.branchDelete().setBranchNames(branch).setForce(true).call() }
-                catch (_: Exception) {}
+                git.branchDelete().setBranchNames("refs/heads/$branch").setForce(true).call()
             }
 
         // create local tracking branches for any new remotes
