@@ -139,15 +139,34 @@ class GitManager {
     suspend fun push(localDir: File, token: String): GitResult = withContext(Dispatchers.IO) {
         try {
             val git = Git.open(localDir)
-            val results = git.push().setCredentialsProvider(creds(token)).call()
-            val error = results.mapNotNull {
-                it.remoteUpdates.firstOrNull { u ->
-                    u.status != org.eclipse.jgit.transport.RemoteRefUpdate.Status.OK &&
-                    u.status != org.eclipse.jgit.transport.RemoteRefUpdate.Status.UP_TO_DATE
+            val branch = git.repository.branch
+
+            val results = git.push()
+                .setCredentialsProvider(creds(token))
+                .setRemote("origin")
+                .add("refs/heads/$branch:refs/heads/$branch")  // explicit refspec
+                .call()
+
+            for (pushResult in results) {
+                for (update in pushResult.remoteUpdates) {
+                    val status = update.status
+                    if (status != org.eclipse.jgit.transport.RemoteRefUpdate.Status.OK &&
+                        status != org.eclipse.jgit.transport.RemoteRefUpdate.Status.UP_TO_DATE
+                    ) {
+                        // Prefer the server message; fall back to status name
+                        val detail = update.message?.takeIf { it.isNotBlank() } ?: status.name
+                        return@withContext when (status) {
+                            org.eclipse.jgit.transport.RemoteRefUpdate.Status.REJECTED_NONFASTFORWARD ->
+                                GitResult.Error("Push rejected: remote has changes you don't have locally. Pull first, then push again.")
+                            org.eclipse.jgit.transport.RemoteRefUpdate.Status.REJECTED_REMOTE_CHANGED ->
+                                GitResult.Error("Push rejected: remote ref changed during push. Try again.")
+                            else ->
+                                GitResult.Error("Push rejected ($status): $detail")
+                        }
+                    }
                 }
-            }.firstOrNull()
-            if (error != null) GitResult.Error("Push rejected: ${error.status}")
-            else GitResult.Success
+            }
+            GitResult.Success
         } catch (e: Exception) {
             GitResult.Error(e.message ?: "Push failed")
         }
