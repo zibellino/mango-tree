@@ -19,5 +19,16 @@
 -dontwarn sun.security.**
 -dontwarn org.ietf.jgss.**
 
+# JGit's JMX monitoring (WindowCache/GC PID lock) uses desktop-JDK-only APIs
+# that don't exist on Android; we never invoke this path.
+-dontwarn java.lang.ProcessHandle
+-dontwarn java.lang.management.**
+-dontwarn javax.management.**
+
+# Tink (pulled in transitively) references the JSR-305 annotations as
+# compile-only; they're not needed at runtime.
+-dontwarn javax.annotation.Nullable
+-dontwarn javax.annotation.concurrent.GuardedBy
+
 # Keep custom app classes (add your own as needed)
 -keep class com.mangotree.** { *; }
