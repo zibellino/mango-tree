@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 pluginManagement {
     repositories {
         google()
@@ -5,6 +8,7 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
@@ -13,5 +17,8 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MangoTree"
+val appProps = Properties().apply {
+    load(FileInputStream(file("app.properties")))
+}
+rootProject.name = appProps.getProperty("app.name")
 include(":app")

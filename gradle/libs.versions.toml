@@ -1,0 +1,36 @@
+[versions]
+agp = "9.1.1"
+kotlin = "2.3.21"
+coreKtx = "1.16.0"
+lifecycleRuntimeKtx = "2.9.1"
+activityKtx = "1.13.0"
+appcompat = "1.7.1"
+material = "1.12.0"
+recyclerview = "1.4.0"
+constraintlayout = "2.2.1"
+lifecycleViewmodelKtx = "2.9.1"
+lifecycleLivedataKtx = "2.9.1"
+coroutinesAndroid = "1.9.0"
+jgit = "6.9.0.202403050737-r"
+appauth = "0.11.1"
+securityCrypto = "1.1.0-alpha06"
+
+[libraries]
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+androidx-recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerview" }
+androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+androidx-lifecycle-viewmodel-ktx = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-ktx", version.ref = "lifecycleViewmodelKtx" }
+androidx-lifecycle-livedata-ktx = { group = "androidx.lifecycle", name = "lifecycle-livedata-ktx", version.ref = "lifecycleLivedataKtx" }
+androidx-activity-ktx = { group = "androidx.activity", name = "activity-ktx", version.ref = "activityKtx" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutinesAndroid" }
+jgit = { group = "org.eclipse.jgit", name = "org.eclipse.jgit", version.ref = "jgit" }
+jgit-http-apache = { group = "org.eclipse.jgit", name = "org.eclipse.jgit.http.apache", version.ref = "jgit" }
+appauth = { group = "net.openid", name = "appauth", version.ref = "appauth" }
+androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
