@@ -1,30 +1,58 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
 }
 
+val appProps = Properties().apply {
+    load(FileInputStream(rootProject.file("app.properties")))
+}
+val appName: String = appProps.getProperty("app.name")
+val appPackage: String = appProps.getProperty("app.package")
+
+// versionCode/versionName are normally passed in from CI as project properties
+// (-PappVersionCode=... -PappVersionName=...), derived from the run number and
+// release tag respectively. Falls back to app.properties for local/dev builds
+// where nobody passes those flags — versionCode 1 is fine locally since it's
+// never uploaded anywhere.
+val ciVersionCode = (project.findProperty("appVersionCode") as String?)?.toIntOrNull()
+val ciVersionName = project.findProperty("appVersionName") as String?
+
 android {
-    namespace = "com.mangotree"
-    compileSdk = 34
+    namespace = appPackage
+    compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.mangotree"
+        applicationId = appPackage
         minSdk = 26
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        targetSdk = 36
+        versionCode = ciVersionCode ?: 1
+        versionName = ciVersionName ?: error("appVersionName must be set via -PappVersionName")
+        resValue("string", "app_name", appName)
 
-        manifestPlaceholders["appAuthRedirectScheme"] = "com.mangotree"
+        manifestPlaceholders["appAuthRedirectScheme"] = appPackage
     }
 
     buildTypes {
         debug {
             isDebuggable = true
         }
-    }
-
-    buildFeatures {
-        viewBinding = true
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.create("release") {
+                storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
     }
 
     compileOptions {
@@ -32,8 +60,9 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+    buildFeatures {
+        viewBinding = true
+        resValues = true
     }
 
     packaging {
@@ -55,28 +84,22 @@ android {
 }
 
 dependencies {
-    // UI
-    implementation("androidx.core:core-ktx:1.13.0")
-    implementation("androidx.appcompat:appcompat:1.6.1")
-    implementation("com.google.android.material:material:1.11.0")
-    implementation("androidx.recyclerview:recyclerview:1.3.2")
-    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.material)
+    implementation(libs.androidx.recyclerview)
+    implementation(libs.androidx.constraintlayout)
 
-    // Lifecycle & ViewModel
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
-    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.7.0")
-    implementation("androidx.activity:activity-ktx:1.9.0")
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.lifecycle.livedata.ktx)
+    implementation(libs.androidx.activity.ktx)
 
-    // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
+    implementation(libs.kotlinx.coroutines.android)
 
-    // Git - JGit (pure Java, well established, powers Eclipse and Gerrit)
-    implementation("org.eclipse.jgit:org.eclipse.jgit:6.9.0.202403050737-r")
-    implementation("org.eclipse.jgit:org.eclipse.jgit.http.apache:6.9.0.202403050737-r")
+    implementation(libs.jgit)
+    implementation(libs.jgit.http.apache)
 
-    // OAuth
-    implementation("net.openid:appauth:0.11.1")
+    implementation(libs.appauth)
 
-    // Encrypted token storage
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation(libs.androidx.security.crypto)
 }
