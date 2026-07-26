@@ -73,6 +73,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (!viewModel.tokenStore.isLoggedIn()) showLoginBanner()
+        else viewModel.fetchGitHubUserInfo()
     }
 
     private fun requestStoragePermission() {
@@ -146,8 +147,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startOAuth() {
-        val prefs = getSharedPreferences("oauth_config", MODE_PRIVATE)
-        val clientId = prefs.getString("client_id", "") ?: ""
+        val clientId = viewModel.tokenStore.getClientId() ?: ""
         if (clientId.isBlank()) { showOAuthConfigDialog(); return }
         oauthLauncher.launch(authManager.buildAuthIntent(clientId))
     }
@@ -164,10 +164,7 @@ class MainActivity : AppCompatActivity() {
                 val clientId = clientIdInput.text.toString().trim()
                 val clientSecret = clientSecretInput.text.toString().trim()
                 if (clientId.isNotBlank() && clientSecret.isNotBlank()) {
-                    getSharedPreferences("oauth_config", MODE_PRIVATE).edit()
-                        .putString("client_id", clientId)
-                        .putString("client_secret", clientSecret)
-                        .apply()
+                    viewModel.tokenStore.saveClientCredentials(clientId, clientSecret)
                     oauthLauncher.launch(authManager.buildAuthIntent(clientId))
                 }
             }
@@ -176,12 +173,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun exchangeToken(response: AuthorizationResponse) {
-        val prefs = getSharedPreferences("oauth_config", MODE_PRIVATE)
-        val clientId = prefs.getString("client_id", "") ?: ""
-        val clientSecret = prefs.getString("client_secret", "") ?: ""
+        val clientId = viewModel.tokenStore.getClientId() ?: ""
+        val clientSecret = viewModel.tokenStore.getClientSecret() ?: ""
         authManager.exchangeCodeForToken(response, clientId, clientSecret,
             onSuccess = { token ->
                 viewModel.tokenStore.saveToken(token)
+                viewModel.fetchGitHubUserInfo()
                 binding.loginBanner.visibility = View.GONE
                 Toast.makeText(this, "Logged in!", Toast.LENGTH_SHORT).show()
             },

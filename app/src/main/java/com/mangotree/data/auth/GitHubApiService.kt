@@ -3,6 +3,7 @@ package com.mangotree.data.auth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -11,6 +12,12 @@ data class GitHubRepo(
     val fullName: String,
     val cloneUrl: String,
     val isPrivate: Boolean
+)
+
+data class GitHubUser(
+    val login: String,
+    val name: String?,
+    val email: String?
 )
 
 class GitHubApiService {
@@ -41,5 +48,23 @@ class GitHubApiService {
             page++
         }
         repos
+    }
+
+    // Fetches the authenticated user's profile (only needs the "repo" scope's
+    // implicit read access; email will be null unless the user has a public
+    // email set on their GitHub profile).
+    suspend fun fetchAuthenticatedUser(token: String): GitHubUser = withContext(Dispatchers.IO) {
+        val url = URL("https://api.github.com/user")
+        val conn = url.openConnection() as HttpURLConnection
+        conn.setRequestProperty("Authorization", "Bearer $token")
+        conn.setRequestProperty("Accept", "application/vnd.github+json")
+        conn.setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
+        val body = conn.inputStream.bufferedReader().readText()
+        val obj = JSONObject(body)
+        GitHubUser(
+            login = obj.getString("login"),
+            name = obj.optString("name", null).takeUnless { it.isNullOrBlank() },
+            email = obj.optString("email", null).takeUnless { it.isNullOrBlank() }
+        )
     }
 }
