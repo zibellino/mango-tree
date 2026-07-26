@@ -13,7 +13,7 @@ A minimal Android git client for syncing GitHub repositories.
 
 ## Storage permissions
 
-MangoTree requests **All files access** (`MANAGE_EXTERNAL_STORAGE`) on Android 11+, not scoped storage.
+MangoTree requests **All files access** (`MANAGE_EXTERNAL_STORAGE`) on Android 11+.
 This is required because JGit operates on real filesystem paths, not the `content://` URIs that scoped
 storage APIs hand back — the folder picker is only used to let you choose *where*, the actual git
 operations then work directly against the resolved path on disk.
@@ -54,7 +54,7 @@ a build artifact from Actions, or by building from source yourself.
 
 1. Tap the login banner and enter your Client ID + Client Secret
 2. Authenticate via GitHub in the browser
-3. Tap **+** to add a repo — enter name, remote URL, then pick a local folder
+3. Tap **+** to add a repo — pick a repo from the list, then pick a local folder
 4. MangoTree will clone if the folder is empty, or attach if it's already a git repo
 
 ### 4. Branch protection (recommended)
