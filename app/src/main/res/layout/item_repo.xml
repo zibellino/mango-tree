@@ -34,13 +34,15 @@
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
-            <TextView
+            <com.google.android.material.chip.Chip
                 android:id="@+id/repoBranch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@drawable/branch_badge_bg"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="2dp"
+                android:clickable="false"
+                android:focusable="false"
+                app:chipMinTouchTargetSize="0dp"
+                app:ensureMinTouchTargetSize="false"
+                style="@style/Widget.Material3.Chip.Assist"
                 android:textAppearance="?attr/textAppearanceLabelSmall" />
 
             <com.google.android.material.button.MaterialButton
