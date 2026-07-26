@@ -42,6 +42,11 @@
                 android:focusable="false"
                 app:chipMinTouchTargetSize="0dp"
                 app:ensureMinTouchTargetSize="false"
+                app:chipMinHeight="24dp"
+                app:chipStartPadding="6dp"
+                app:chipEndPadding="6dp"
+                app:textStartPadding="2dp"
+                app:textEndPadding="2dp"
                 style="@style/Widget.Material3.Chip.Assist"
                 android:textAppearance="?attr/textAppearanceLabelSmall" />
 
