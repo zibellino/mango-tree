@@ -203,6 +203,7 @@ class GitManager {
             git.commit()
                 .setMessage(message.ifBlank { "Update" })
                 .setAuthor(authorName, authorEmail)
+                .setCommitter(authorName, authorEmail)
                 .call()
             GitResult.Success
         } catch (e: Exception) {
