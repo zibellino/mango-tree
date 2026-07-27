@@ -230,6 +230,7 @@ class MainActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 val result = viewModel.gitManager.clone(ghRepo.cloneUrl, dir, token)
                 if (result is GitResult.Success) {
+                    viewModel.gitManager.pull(dir, token)
                     val branch = viewModel.gitManager.defaultBranch(dir)
                     viewModel.repoStore.add(RepoEntry(ghRepo.name, uri.toString(), ghRepo.cloneUrl, branch))
                     viewModel.refreshRepos()
