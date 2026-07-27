@@ -11,6 +11,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -120,8 +121,17 @@ class MainActivity : AppCompatActivity() {
                 is UiState.Loading -> binding.progressBar.visibility = View.VISIBLE
                 is UiState.Message -> {
                     binding.progressBar.visibility = View.GONE
-                    Toast.makeText(this, state.text,
-                        if (state.isError) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
+                    val toast = Toast.makeText(this, state.text,
+                        if (state.isError) Toast.LENGTH_LONG else Toast.LENGTH_SHORT)
+                    val icon = if (state.isError) android.R.drawable.ic_dialog_alert
+                               else android.R.drawable.ic_dialog_info
+                    val messageView = toast.view?.findViewById<TextView>(android.R.id.message)
+                    messageView?.apply {
+                        setCompoundDrawablesWithIntrinsicBounds(icon, 0, 0, 0)
+                        compoundDrawablePadding = resources.getDimensionPixelSize(
+                            com.google.android.material.R.dimen.mtrl_btn_icon_padding)
+                    }
+                    toast.show()
                 }
                 is UiState.ConflictDetected -> {
                     binding.progressBar.visibility = View.GONE
