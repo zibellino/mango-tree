@@ -43,11 +43,11 @@ class GitManager {
 
     suspend fun defaultBranch(localDir: File): String = withContext(Dispatchers.IO) {
         try {
-            Git.open(localDir).repository.config
-                .getString("remote", "origin", "HEAD")
-                ?.removePrefix("refs/heads/")
-                ?: "main"
-            
+            // remote.origin.HEAD is a ref file, not a config entry — git never
+            // populates it as a config key, so reading it here always misses.
+            // The branch JGit actually checked out during clone is the real
+            // answer, and is already reflected in the current HEAD.
+            Git.open(localDir).repository.branch ?: "main"
         } catch (e: Exception) {
             "main"
         }
