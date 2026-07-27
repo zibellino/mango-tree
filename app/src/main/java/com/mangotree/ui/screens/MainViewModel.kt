@@ -39,9 +39,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var conflictRepoDir: File? = null
     var conflictBranch: String = "main"
 
-    // GitHub user info cache
-    var githubUserName: String = ""
+    // GitHub user info cache, used as the commit author.
+    // Falls back to "MangoTree" / blank email if the profile can't be fetched.
+    var githubUserName: String = "MangoTree"
     var githubUserEmail: String = ""
+    private var githubUserInfoFetched: Boolean = false
 
     init {
         repos.value = repoStore.getAll()
@@ -85,6 +87,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val dir = resolveDir(repo) ?: return
         uiState.value = UiState.Loading
         viewModelScope.launch {
+            ensureGitHubUserInfo()
             val result = gitManager.commit(dir, files, message, githubUserName, githubUserEmail)
             if (result == GitResult.Success) {
                 changedFiles.value = emptyList()
@@ -138,6 +141,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 uiState.value = UiState.Message("Failed to load repos: ${e.message}", isError = true)
             }
+        }
+    }
+
+    // Best-effort early fetch, called after login / on startup so the UI
+    // can warm up the cache. commit() awaits ensureGitHubUserInfo() directly,
+    // so it can never race with this.
+    fun fetchGitHubUserInfo() {
+        viewModelScope.launch { ensureGitHubUserInfo() }
+    }
+
+    // Fetches the GitHub user once and caches the result. Safe to call
+    // repeatedly — a successful fetch is only performed once; a failed
+    // fetch leaves the "MangoTree" / blank-email defaults and will retry
+    // on the next call (e.g. the next commit).
+    private suspend fun ensureGitHubUserInfo() {
+        if (githubUserInfoFetched) return
+        val token = tokenStore.getToken() ?: return
+        try {
+            val user = apiService.fetchAuthenticatedUser(token)
+            githubUserName = user.name ?: user.login
+            githubUserEmail = user.email ?: ""
+            githubUserInfoFetched = true
+        } catch (_: Exception) {
+            githubUserName = "MangoTree"
+            githubUserEmail = ""
         }
     }
 

@@ -22,7 +22,20 @@ class TokenStore(context: Context) {
 
     fun isLoggedIn() = getToken() != null
 
+    fun saveClientCredentials(clientId: String, clientSecret: String) {
+        prefs.edit()
+            .putString(KEY_CLIENT_ID, clientId)
+            .putString(KEY_CLIENT_SECRET, clientSecret)
+            .apply()
+    }
+
+    fun getClientId(): String? = prefs.getString(KEY_CLIENT_ID, null)
+
+    fun getClientSecret(): String? = prefs.getString(KEY_CLIENT_SECRET, null)
+
     companion object {
         private const val KEY_TOKEN = "github_oauth_token"
+        private const val KEY_CLIENT_ID = "github_oauth_client_id"
+        private const val KEY_CLIENT_SECRET = "github_oauth_client_secret"
     }
 }

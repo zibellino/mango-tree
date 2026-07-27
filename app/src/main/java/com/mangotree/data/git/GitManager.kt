@@ -43,11 +43,11 @@ class GitManager {
 
     suspend fun defaultBranch(localDir: File): String = withContext(Dispatchers.IO) {
         try {
-            Git.open(localDir).repository.config
-                .getString("remote", "origin", "HEAD")
-                ?.removePrefix("refs/heads/")
-                ?: "main"
-            
+            // remote.origin.HEAD is a ref file, not a config entry — git never
+            // populates it as a config key, so reading it here always misses.
+            // The branch JGit actually checked out during clone is the real
+            // answer, and is already reflected in the current HEAD.
+            Git.open(localDir).repository.branch ?: "main"
         } catch (e: Exception) {
             "main"
         }
@@ -197,12 +197,20 @@ class GitManager {
     ): GitResult = withContext(Dispatchers.IO) {
         try {
             val git = Git.open(localDir)
-            val addCmd = git.add()
-            files.forEach { addCmd.addFilepattern(it) }
-            addCmd.call()
+            files.forEach { path ->
+                if (File(localDir, path).exists()) {
+                    git.add().addFilepattern(path).call()
+                } else {
+                    // AddCommand silently ignores paths that no longer exist on
+                    // disk, so a locally-deleted file never gets staged as a
+                    // removal. RmCommand stages the deletion in the index instead.
+                    git.rm().addFilepattern(path).call()
+                }
+            }
             git.commit()
                 .setMessage(message.ifBlank { "Update" })
                 .setAuthor(authorName, authorEmail)
+                .setCommitter(authorName, authorEmail)
                 .call()
             GitResult.Success
         } catch (e: Exception) {
