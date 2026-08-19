@@ -1,5 +1,7 @@
 package com.mangotree.data.git
 
+import android.content.Context
+import android.media.MediaScannerConnection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.eclipse.jgit.api.CreateBranchCommand
@@ -23,9 +25,52 @@ data class ChangedFile(
     val status: String  // "Modified", "Added", "Deleted", "Untracked"
 )
 
-class GitManager {
+/**
+ * [context] is required so we can rescan a repo directory with MediaScannerConnection
+ * after JGit writes to it. JGit performs plain java.io.File writes on the raw
+ * filesystem path resolved from the user's picked SAF tree Uri (see UriToFile),
+ * bypassing MediaStore entirely. Without an explicit rescan, apps whose file
+ * pickers read from the MediaStore index (rather than doing a live filesystem
+ * read) won't see files that were added, modified, or deleted by clone/pull/
+ * checkout until an unrelated scan happens to catch up (or the device reboots).
+ */
+class GitManager(private val context: Context) {
 
     private fun creds(token: String) = UsernamePasswordCredentialsProvider(token, "")
+
+    /**
+     * Recursively rescans [dir] so MediaStore (and anything backed by it, like
+     * other apps' file pickers) picks up files that JGit just created, modified,
+     * or deleted directly on disk.
+     */
+    private fun rescan(dir: File) {
+        if (!dir.exists()) return
+        val paths = mutableListOf<String>()
+        // Include the directory itself so deletions within it are also noticed.
+        collectPaths(dir, paths)
+        if (paths.isEmpty()) return
+        try {
+            MediaScannerConnection.scanFile(context, paths.toTypedArray(), null, null)
+        } catch (_: Exception) {
+            // Scanning is a best-effort visibility fix; never fail the git
+            // operation itself because of it.
+        }
+    }
+
+    private fun collectPaths(dir: File, out: MutableList<String>) {
+        out.add(dir.absolutePath)
+        val children = dir.listFiles() ?: return
+        for (child in children) {
+            if (child.isDirectory) {
+                // Skip .git internals — they're never meant to be visible to
+                // other apps and walking the whole object store is wasted work.
+                if (child.name == ".git") continue
+                collectPaths(child, out)
+            } else {
+                out.add(child.absolutePath)
+            }
+        }
+    }
 
     suspend fun clone(remoteUrl: String, localDir: File, token: String): GitResult =
         withContext(Dispatchers.IO) {
@@ -35,6 +80,7 @@ class GitManager {
                     .setDirectory(localDir)
                     .setCredentialsProvider(creds(token))
                     .call()
+                rescan(localDir)
                 GitResult.Success
             } catch (e: Exception) {
                 GitResult.Error(e.message ?: "Clone failed")
@@ -61,6 +107,7 @@ class GitManager {
                 .setRebase(true)
                 .call()
             if (result.isSuccessful) syncLocalBranchesToRemote(git, token)
+            rescan(localDir)
             when {
                 result.isSuccessful -> GitResult.Success
                 result.rebaseResult?.status == RebaseResult.Status.STOPPED ->
@@ -130,6 +177,7 @@ class GitManager {
                 } catch (_: Exception) {}
                 git.fetch().setCredentialsProvider(creds(token)).call()
                 git.reset().setMode(ResetCommand.ResetType.HARD).setRef("origin/$branch").call()
+                rescan(localDir)
                 GitResult.Success
             } catch (e: Exception) {
                 GitResult.Error(e.message ?: "Force pull failed")
@@ -166,6 +214,7 @@ class GitManager {
                     }
                 }
             }
+            // Push doesn't touch the working tree, so no rescan needed here.
             GitResult.Success
         } catch (e: Exception) {
             GitResult.Error(e.message ?: "Push failed")
@@ -212,6 +261,8 @@ class GitManager {
                 .setAuthor(authorName, authorEmail)
                 .setCommitter(authorName, authorEmail)
                 .call()
+            // Commit only touches the .git index/objects, not the working tree,
+            // so there's nothing new for other apps' file pickers to see.
             GitResult.Success
         } catch (e: Exception) {
             GitResult.Error(e.message ?: "Commit failed")
@@ -222,7 +273,7 @@ class GitManager {
         try {
             val git = Git.open(localDir)
             val status = git.status().call()
-            when {
+            val result = when {
                 status.untracked.contains(path) -> {
                     File(localDir, path).delete()
                     GitResult.Success
@@ -232,6 +283,8 @@ class GitManager {
                     GitResult.Success
                 }
             }
+            rescan(localDir)
+            result
         } catch (e: Exception) {
             GitResult.Error(e.message ?: "Discard failed")
         }
@@ -258,6 +311,7 @@ class GitManager {
                     git.checkout().setCreateBranch(true).setName(branch)
                         .setStartPoint("origin/$branch").call()
                 }
+                rescan(localDir)
                 GitResult.Success
             } catch (e: Exception) {
                 GitResult.Error(e.message ?: "Branch switch failed")
