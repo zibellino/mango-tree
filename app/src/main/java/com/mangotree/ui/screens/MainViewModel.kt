@@ -28,7 +28,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     val tokenStore = TokenStore(app)
     val repoStore = RepoStore(app)
-    val gitManager = GitManager()
+    val gitManager = GitManager(app)
     val apiService = GitHubApiService()
 
     val repos = MutableLiveData<List<RepoEntry>>(emptyList())
