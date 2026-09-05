@@ -74,7 +74,3 @@ This protects your work at the remote level regardless of what the app does.
   access token and the OAuth app's client ID/secret
 - **Folder picker (SAF)** — used only to select a location; git operations then work on the
   resolved real filesystem path, which requires all-files access (see Storage permissions above)
-
-## License
-
-MIT
